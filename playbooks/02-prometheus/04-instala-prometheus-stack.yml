@@ -1,0 +1,41 @@
+---
+- name: 04 - Instala Kube-Prometheus-Stack via Helm
+  hosts: k8s-control-plane-01
+  become: yes
+  vars:
+    kubeconfig_path: "/etc/kubernetes/admin.conf"
+    monitoring_namespace: "monitoring"
+
+  tasks:
+    - name: Adicionar repositorio Helm do Prometheus
+      kubernetes.core.helm_repository:
+        name: prometheus-community
+        repo_url: "prometheus-community.github.io/helm-charts"
+
+    - name: Implantar Kube-Prometheus-Stack
+      kubernetes.core.helm:
+        name: kube-prometheus-stack
+        chart_ref: prometheus-community/kube-prometheus-stack
+        release_namespace: "{{ monitoring_namespace }}"
+        create_namespace: true
+        state: present
+        wait: yes
+        kubeconfig: "{{ kubeconfig_path }}"
+        values:
+          prometheus:
+            prometheusSpec:
+              retention: 15d
+              storageSpec:
+                volumeClaimTemplate:
+                  spec:
+                    storageClassName: nfs-client
+                    accessModes: ["ReadWriteOnce"]
+                    resources:
+                      requests:
+                        storage: 50Gi
+          grafana:
+            enabled: true
+            service:
+              type: LoadBalancer
+              loadBalancerIP: 10.0.39.202
+            adminPassword: "GrafanaSecurePassword2026!"

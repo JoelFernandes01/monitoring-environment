@@ -1,0 +1,86 @@
+---
+- name: 01 - Deploy do Banco de Dados PostgreSQL para o Zabbix
+  hosts: k8s-control-plane-01
+  become: yes
+  vars:
+    kubeconfig_path: "/etc/kubernetes/admin.conf"
+    zabbix_namespace: "zabbix"
+
+  tasks:
+    - name: Criar Secret com credenciais do PostgreSQL Zabbix
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig_path }}"
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: zabbix-db-secret
+            namespace: "{{ zabbix_namespace }}"
+          type: Opaque
+          stringData:
+            POSTGRES_DB: "zabbix"
+            POSTGRES_USER: "zabbix"
+            POSTGRES_PASSWORD: "ZabbixSecurePassword2026!"
+
+    - name: Implantar Deployment do PostgreSQL Zabbix
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig_path }}"
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: zabbix-postgresql
+            namespace: "{{ zabbix_namespace }}"
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: zabbix-postgresql
+            template:
+              metadata:
+                labels:
+                  app: zabbix-postgresql
+              spec:
+                containers:
+                  - name: postgresql
+                    image: postgres:15-alpine
+                    envFrom:
+                      - secretRef:
+                          name: zabbix-db-secret
+                    ports:
+                      - containerPort: 5432
+                    volumeMounts:
+                      - mountPath: /var/lib/postgresql/data
+                        name: postgres-storage
+                volumes:
+                  - name: postgres-storage
+                    persistentVolumeClaim:
+                      claimName: zabbix-db-pvc
+
+    - name: Criar Service ClusterIP para o PostgreSQL Zabbix
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig_path }}"
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: zabbix-db-service
+            namespace: "{{ zabbix_namespace }}"
+          spec:
+            selector:
+              app: zabbix-postgresql
+            ports:
+              - port: 5432
+                targetPort: 5432
+
+    - name: Aguardar pod do PostgreSQL ficar em estado Ready
+      ansible.builtin.command: >
+        kubectl wait --namespace {{ zabbix_namespace }}
+        --for=condition=ready pod
+        --selector=app=zabbix-postgresql
+        --timeout=180s
+        --kubeconfig={{ kubeconfig_path }}
+      changed_when: false

@@ -1,0 +1,30 @@
+---
+- name: 08 - Importa Dashboards para o Grafana via ConfigMap
+  hosts: k8s-control-plane-01
+  become: yes
+  vars:
+    kubeconfig_path: "/etc/kubernetes/admin.conf"
+    monitoring_namespace: "monitoring"
+
+  tasks:
+    - name: Criar ConfigMap para Dashboard de Cluster Kubernetes
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig_path }}"
+        definition:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: dashboard-k8s-cluster-overview
+            namespace: "{{ monitoring_namespace }}"
+            labels:
+              grafana_dashboard: "1"
+          data:
+            k8s-cluster.json: |
+              {
+                "title": "Kubernetes Cluster Overview",
+                "tags": ["kubernetes", "prometheus"],
+                "timezone": "browser",
+                "schemaVersion": 16,
+                "version": 1
+              }

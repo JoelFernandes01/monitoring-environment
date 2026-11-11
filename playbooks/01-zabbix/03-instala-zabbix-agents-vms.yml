@@ -1,0 +1,31 @@
+---
+- name: 03 - Instala e Configura Zabbix Agent 2 em todas as VMs do Ambiente
+  hosts: all_vms
+  become: true
+  vars:
+    zabbix_server_ip: "10.0.39.201"
+
+  tasks:
+    - name: Instalar Zabbix Agent 2
+      ansible.builtin.apt:
+        name: zabbix-agent2
+        state: present
+        update_cache: yes
+
+    - name: Configurar IP do Zabbix Server no zabbix_agent2.conf
+      ansible.builtin.lineinfile:
+        path: /etc/zabbix/zabbix_agent2.conf
+        regexp: '^Server='
+        line: "Server={{ zabbix_server_ip }}"
+
+    - name: Configurar Hostname ativo no zabbix_agent2.conf
+      ansible.builtin.lineinfile:
+        path: /etc/zabbix/zabbix_agent2.conf
+        regexp: '^Hostname='
+        line: "Hostname={{ inventory_hostname }}"
+
+    - name: Habilitar e Iniciar Zabbix Agent 2
+      ansible.builtin.systemd:
+        name: zabbix-agent2
+        enabled: yes
+        state: restarted

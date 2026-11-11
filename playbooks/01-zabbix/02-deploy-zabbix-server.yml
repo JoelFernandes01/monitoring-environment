@@ -1,0 +1,101 @@
+---
+- name: 02 - Deploy Zabbix Server e Web Interface
+  hosts: k8s-control-plane-01
+  become: yes
+  vars:
+    kubeconfig_path: "/etc/kubernetes/admin.conf"
+    zabbix_namespace: "zabbix"
+
+  tasks:
+    - name: Implantar Zabbix Server Deployment
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig_path }}"
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: zabbix-server
+            namespace: "{{ zabbix_namespace }}"
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: zabbix-server
+            template:
+              metadata:
+                labels:
+                  app: zabbix-server
+              spec:
+                containers:
+                  - name: zabbix-server
+                    image: zabbix/zabbix-server-pgsql:ubuntu-6.4-latest
+                    env:
+                      - name: DB_SERVER_HOST
+                        value: "zabbix-db-service"
+                      - name: POSTGRES_DB
+                        value: "zabbix"
+                      - name: POSTGRES_USER
+                        value: "zabbix"
+                      - name: POSTGRES_PASSWORD
+                        value: "ZabbixSecurePassword2026!"
+                    ports:
+                      - containerPort: 10051
+
+    - name: Implantar Zabbix Web Interface Deployment
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig_path }}"
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: zabbix-web
+            namespace: "{{ zabbix_namespace }}"
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: zabbix-web
+            template:
+              metadata:
+                labels:
+                  app: zabbix-web
+              spec:
+                containers:
+                  - name: zabbix-web
+                    image: zabbix/zabbix-web-nginx-pgsql:ubuntu-6.4-latest
+                    env:
+                      - name: DB_SERVER_HOST
+                        value: "zabbix-db-service"
+                      - name: POSTGRES_DB
+                        value: "zabbix"
+                      - name: POSTGRES_USER
+                        value: "zabbix"
+                      - name: POSTGRES_PASSWORD
+                        value: "ZabbixSecurePassword2026!"
+                      - name: ZBX_SERVER_HOST
+                        value: "zabbix-server"
+                      - name: PHP_TZ
+                        value: "America/Sao_Paulo"
+                    ports:
+                      - containerPort: 8080
+
+    - name: Criar Service LoadBalancer para Zabbix Web (IP MetalLB: 10.0.39.201)
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig_path }}"
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: zabbix-web-service
+            namespace: "{{ zabbix_namespace }}"
+          spec:
+            type: LoadBalancer
+            loadBalancerIP: 10.0.39.201
+            selector:
+              app: zabbix-web
+            ports:
+              - port: 80
+                targetPort: 8080
