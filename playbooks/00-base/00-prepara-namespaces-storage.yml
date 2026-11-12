@@ -1,28 +1,23 @@
 ---
-- name: 00 - Prepara Namespaces e Armazenamento para Observabilidade
+- name: 00 - Prepara Namespace e Storage PVC para o Zabbix
   hosts: k8s-control-plane-01
   become: yes
   vars:
     kubeconfig_path: "/etc/kubernetes/admin.conf"
+    zabbix_namespace: "zabbix"
 
   tasks:
-    - name: Criar Namespace 'monitoring'
+    - name: Criar Namespace zabbix
       kubernetes.core.k8s:
-        name: monitoring
-        api_version: v1
-        kind: Namespace
         state: present
         kubeconfig: "{{ kubeconfig_path }}"
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ zabbix_namespace }}"
 
-    - name: Criar Namespace 'zabbix'
-      kubernetes.core.k8s:
-        name: zabbix
-        api_version: v1
-        kind: Namespace
-        state: present
-        kubeconfig: "{{ kubeconfig_path }}"
-
-    - name: Criar PersistentVolumeClaim NFS para Zabbix Database
+    - name: Criar PersistentVolumeClaim (PVC) NFS para o PostgreSQL do Zabbix
       kubernetes.core.k8s:
         state: present
         kubeconfig: "{{ kubeconfig_path }}"
@@ -31,29 +26,11 @@
           kind: PersistentVolumeClaim
           metadata:
             name: zabbix-db-pvc
-            namespace: zabbix
+            namespace: "{{ zabbix_namespace }}"
           spec:
             accessModes:
               - ReadWriteOnce
             storageClassName: nfs-client
             resources:
               requests:
-                storage: 20Gi
-
-    - name: Criar PersistentVolumeClaim NFS para Prometheus TSDB
-      kubernetes.core.k8s:
-        state: present
-        kubeconfig: "{{ kubeconfig_path }}"
-        definition:
-          apiVersion: v1
-          kind: PersistentVolumeClaim
-          metadata:
-            name: prometheus-data-pvc
-            namespace: monitoring
-          spec:
-            accessModes:
-              - ReadWriteOnce
-            storageClassName: nfs-client
-            resources:
-              requests:
-                storage: 50Gi
+                storage: 10Gi

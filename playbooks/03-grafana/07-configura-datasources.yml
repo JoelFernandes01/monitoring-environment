@@ -1,13 +1,16 @@
 ---
-- name: 07 - Provisiona DataSources do Prometheus e Zabbix no Grafana
+- name: 07 - Provisiona DataSources do Prometheus e Zabbix 8.0 no Grafana
   hosts: k8s-control-plane-01
   become: yes
   vars:
     kubeconfig_path: "/etc/kubernetes/admin.conf"
     monitoring_namespace: "monitoring"
+    zabbix_url: "http://10.0.39.201/api_jsonrpc.php"
+    zabbix_user: "Admin"
+    zabbix_pass: "zabbix"
 
   tasks:
-    - name: Criar ConfigMap de DataSources para o Grafana
+    - name: Criar ConfigMap de DataSources para o Grafana (Prometheus + Zabbix 8.0)
       kubernetes.core.k8s:
         state: present
         kubeconfig: "{{ kubeconfig_path }}"
@@ -26,12 +29,24 @@
                 - name: Prometheus
                   type: prometheus
                   access: proxy
-                  url: "kube-prometheus-stack-prometheus.monitoring.svc:9090"
+                  url: "http://kube-prometheus-stack-prometheus.monitoring.svc:9090"
                   isDefault: true
-                - name: Zabbix
+                  jsonData:
+                    timeInterval: "15s"
+                - name: Zabbix 8.0
                   type: alexanderzobnin-zabbix-datasource
                   access: proxy
-                  url: "10.0.39.201/api_jsonrpc.php"
+                  url: "{{ zabbix_url }}"
                   jsonData:
-                    username: "Admin"
+                    username: "{{ zabbix_user }}"
                     trends: true
+                    directDBConnection: false
+                  secureJsonData:
+                    password: "{{ zabbix_pass }}"
+
+    - name: Reiniciar Pod do Grafana para aplicar os DataSources
+      ansible.builtin.command: >
+        kubectl rollout restart deployment/kube-prometheus-stack-grafana
+        -n {{ monitoring_namespace }}
+        --kubeconfig={{ kubeconfig_path }}
+      changed_when: true

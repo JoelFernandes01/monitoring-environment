@@ -1,5 +1,5 @@
 ---
-- name: 01 - Deploy do Banco de Dados PostgreSQL para o Zabbix
+- name: 01 - Deploy do Banco de Dados PostgreSQL 16 para o Zabbix 8.0
   hosts: k8s-control-plane-01
   become: yes
   vars:
@@ -23,7 +23,7 @@
             POSTGRES_USER: "zabbix"
             POSTGRES_PASSWORD: "ZabbixSecurePassword2026!"
 
-    - name: Implantar Deployment do PostgreSQL Zabbix
+    - name: Implantar Deployment do PostgreSQL 16 Zabbix
       kubernetes.core.k8s:
         state: present
         kubeconfig: "{{ kubeconfig_path }}"
@@ -45,7 +45,7 @@
               spec:
                 containers:
                   - name: postgresql
-                    image: postgres:15-alpine
+                    image: postgres:16-alpine
                     envFrom:
                       - secretRef:
                           name: zabbix-db-secret

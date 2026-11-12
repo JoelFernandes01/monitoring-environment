@@ -1,13 +1,14 @@
 ---
-- name: 02 - Deploy Zabbix Server e Web Interface
+- name: 02 - Deploy Zabbix Server 8.0 e Web Interface Nginx/PgSQL
   hosts: k8s-control-plane-01
   become: yes
   vars:
     kubeconfig_path: "/etc/kubernetes/admin.conf"
     zabbix_namespace: "zabbix"
+    zabbix_tag: "ubuntu-8.0-latest"
 
   tasks:
-    - name: Implantar Zabbix Server Deployment
+    - name: Implantar Zabbix Server 8.0 Deployment
       kubernetes.core.k8s:
         state: present
         kubeconfig: "{{ kubeconfig_path }}"
@@ -29,7 +30,7 @@
               spec:
                 containers:
                   - name: zabbix-server
-                    image: zabbix/zabbix-server-pgsql:ubuntu-6.4-latest
+                    image: "zabbix/zabbix-server-pgsql:{{ zabbix_tag }}"
                     env:
                       - name: DB_SERVER_HOST
                         value: "zabbix-db-service"
@@ -42,7 +43,26 @@
                     ports:
                       - containerPort: 10051
 
-    - name: Implantar Zabbix Web Interface Deployment
+    - name: Criar Service ClusterIP para Zabbix Server (Porta 10051 Trappers/Agents)
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig_path }}"
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: zabbix-server-service
+            namespace: "{{ zabbix_namespace }}"
+          spec:
+            type: ClusterIP
+            selector:
+              app: zabbix-server
+            ports:
+              - name: trapper
+                port: 10051
+                targetPort: 10051
+
+    - name: Implantar Zabbix Web Interface 8.0 Deployment
       kubernetes.core.k8s:
         state: present
         kubeconfig: "{{ kubeconfig_path }}"
@@ -64,7 +84,7 @@
               spec:
                 containers:
                   - name: zabbix-web
-                    image: zabbix/zabbix-web-nginx-pgsql:ubuntu-6.4-latest
+                    image: "zabbix/zabbix-web-nginx-pgsql:{{ zabbix_tag }}"
                     env:
                       - name: DB_SERVER_HOST
                         value: "zabbix-db-service"
@@ -99,3 +119,8 @@
             ports:
               - port: 80
                 targetPort: 8080
+
+    - name: Aguardar pod do Zabbix Server e Web em estado Ready
+      ansible.builtin.command: >
+        kubectl rollout status deployment/zabbix-server -n {{ zabbix_namespace }} --timeout=180s --kubeconfig={{ kubeconfig_path }}
+      changed_when: false

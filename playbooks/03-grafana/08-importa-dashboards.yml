@@ -1,5 +1,5 @@
 ---
-- name: 08 - Importa Dashboards para o Grafana via ConfigMap
+- name: 08 - Importa Dashboards do Zabbix 8.0 e Kubernetes no Grafana
   hosts: k8s-control-plane-01
   become: yes
   vars:
@@ -7,7 +7,7 @@
     monitoring_namespace: "monitoring"
 
   tasks:
-    - name: Criar ConfigMap para Dashboard de Cluster Kubernetes
+    - name: Criar ConfigMap para Dashboard do Zabbix 8.0 (Hosts & Infraestrutura)
       kubernetes.core.k8s:
         state: present
         kubeconfig: "{{ kubeconfig_path }}"
@@ -15,16 +15,64 @@
           apiVersion: v1
           kind: ConfigMap
           metadata:
-            name: dashboard-k8s-cluster-overview
+            name: dashboard-zabbix-infrastructure
             namespace: "{{ monitoring_namespace }}"
             labels:
               grafana_dashboard: "1"
           data:
-            k8s-cluster.json: |
+            zabbix-infra.json: |
               {
-                "title": "Kubernetes Cluster Overview",
-                "tags": ["kubernetes", "prometheus"],
-                "timezone": "browser",
-                "schemaVersion": 16,
-                "version": 1
+                "annotations": { "list": [] },
+                "editable": true,
+                "fiscalYearStartMonth": 0,
+                "graphTooltip": 1,
+                "id": null,
+                "links": [],
+                "liveNow": false,
+                "panels": [
+                  {
+                    "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+                    "id": 1,
+                    "title": "Status dos Agentes Zabbix 8.0 (VMs Proxmox)",
+                    "type": "stat",
+                    "datasource": { "type": "alexanderzobnin-zabbix-datasource", "uid": "Zabbix 8.0" },
+                    "targets": [
+                      {
+                        "group": { "filter": "/.*/" },
+                        "host": { "filter": "/.*/" },
+                        "item": { "filter": "Agent ping" },
+                        "refId": "A"
+                      }
+                    ]
+                  },
+                  {
+                    "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+                    "id": 2,
+                    "title": "Uso de CPU Global por VM (Zabbix 8.0 Agent)",
+                    "type": "timeseries",
+                    "datasource": { "type": "alexanderzobnin-zabbix-datasource", "uid": "Zabbix 8.0" },
+                    "targets": [
+                      {
+                        "group": { "filter": "/.*/" },
+                        "host": { "filter": "/.*/" },
+                        "item": { "filter": "/CPU utilization|System load/" },
+                        "refId": "A"
+                      }
+                    ]
+                  }
+                ],
+                "refresh": "10s",
+                "schemaVersion": 38,
+                "style": "dark",
+                "tags": ["zabbix", "proxmox", "vms"],
+                "time": { "from": "now-1h", "to": "now" },
+                "title": "Zabbix 8.0 — Infraestrutura & VMs",
+                "uid": "zabbix-8-infra-overview"
               }
+
+    - name: Reiniciar Pod do Grafana para carregar os Dashboards
+      ansible.builtin.command: >
+        kubectl rollout restart deployment/kube-prometheus-stack-grafana
+        -n {{ monitoring_namespace }}
+        --kubeconfig={{ kubeconfig_path }}
+      changed_when: true
