@@ -1,0 +1,67 @@
+---
+- name: 06 - Instala Plugin Zabbix e Cria Ingress Traefik para Grafana
+  hosts: k8s-control-plane-01
+  become: yes
+  vars:
+    kubeconfig_path: "/etc/kubernetes/admin.conf"
+    monitoring_namespace: "monitoring"
+
+  tasks:
+    - name: Configurar variaveis de ambiente do Grafana para o Plugin Zabbix
+      ansible.builtin.shell: |
+        kubectl --kubeconfig {{ kubeconfig_path }} set env deployment/kube-prometheus-stack-grafana -n {{ monitoring_namespace }} \
+          GF_INSTALL_PLUGINS=alexanderzobnin-zabbix-app \
+          GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=alexanderzobnin-zabbix-app
+      register: env_out
+
+    - name: Criar Traefik Ingress para o Grafana (grafana.nverse.local e grafana.local)
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig_path }}"
+        definition:
+          apiVersion: networking.k8s.io/v1
+          kind: Ingress
+          metadata:
+            name: grafana-ingress
+            namespace: "{{ monitoring_namespace }}"
+            annotations:
+              traefik.ingress.kubernetes.io/router.entrypoints: web
+          spec:
+            ingressClassName: traefik
+            rules:
+              - host: grafana.nverse.local
+                http:
+                  paths:
+                    - path: /
+                      pathType: Prefix
+                      backend:
+                        service:
+                          name: kube-prometheus-stack-grafana
+                          port:
+                            number: 80
+              - host: grafana.local
+                http:
+                  paths:
+                    - path: /
+                      pathType: Prefix
+                      backend:
+                        service:
+                          name: kube-prometheus-stack-grafana
+                          port:
+                            number: 80
+
+    - name: Forcar reinicio limpo do Grafana (scale 0 -> scale 1)
+      ansible.builtin.shell: |
+        kubectl --kubeconfig {{ kubeconfig_path }} scale deployment/kube-prometheus-stack-grafana -n {{ monitoring_namespace }} --replicas=0
+        sleep 5
+        kubectl --kubeconfig {{ kubeconfig_path }} scale deployment/kube-prometheus-stack-grafana -n {{ monitoring_namespace }} --replicas=1
+      register: scale_out
+
+    - name: Aguardar rollout do Deployment do Grafana com o novo plugin e Ingress
+      ansible.builtin.shell: |
+        kubectl --kubeconfig {{ kubeconfig_path }} rollout status deployment/kube-prometheus-stack-grafana -n {{ monitoring_namespace }} --timeout=600s
+      register: rollout_out
+
+    - name: Exibir resultado da instalacao
+      ansible.builtin.debug:
+        msg: "Plugin Zabbix instalado e Ingress criado com sucesso para o Grafana em http://grafana.nverse.local!"

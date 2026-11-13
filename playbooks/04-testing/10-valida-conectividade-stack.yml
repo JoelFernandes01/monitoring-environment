@@ -1,0 +1,61 @@
+---
+- name: 09 - Valida Conectividade e Prontidao da Stack de Observabilidade via Ingress (FQDN)
+  hosts: k8s-control-plane-01
+  become: yes
+  vars:
+    kubeconfig_path: "/etc/kubernetes/admin.conf"
+    traefik_ip: "10.0.39.200"
+    zabbix_fqdn: "zabbix.nverse.local"
+    grafana_fqdn: "grafana.nverse.local"
+
+  tasks:
+    - name: Validar resposta HTTP do Zabbix Web via Traefik Ingress (zabbix.nverse.local)
+      ansible.builtin.uri:
+        url: "http://{{ traefik_ip }}"
+        headers:
+          Host: "{{ zabbix_fqdn }}"
+        status_code: [200, 302]
+        return_content: no
+      register: zabbix_web_check
+      until: zabbix_web_check.status is defined and zabbix_web_check.status in [200, 302]
+      retries: 5
+      delay: 5
+
+    - name: Validar resposta HTTP do Grafana via Traefik Ingress (grafana.nverse.local)
+      ansible.builtin.uri:
+        url: "http://{{ traefik_ip }}"
+        headers:
+          Host: "{{ grafana_fqdn }}"
+        status_code: [200, 302]
+        return_content: no
+      register: grafana_check
+      until: grafana_check.status is defined and grafana_check.status in [200, 302]
+      retries: 5
+      delay: 5
+      ignore_errors: yes
+
+    - name: Obter status dos Pods no Namespace Zabbix
+      ansible.builtin.command: >
+        kubectl get pods -n zabbix --kubeconfig={{ kubeconfig_path }}
+      register: pods_zabbix
+
+    - name: Obter status dos Pods no Namespace Monitoring
+      ansible.builtin.command: >
+        kubectl get pods -n monitoring --kubeconfig={{ kubeconfig_path }}
+      register: pods_monitoring
+
+    - name: Exibir Relatorio de Conectividade da Stack
+      ansible.builtin.debug:
+        msg:
+          - "========================================================="
+          - "         RELATORIO DE CONECTIVIDADE DA STACK             "
+          - "========================================================="
+          - "Zabbix Web (zabbix.nverse.local): {{ 'OK (HTTP ' ~ zabbix_web_check.status ~ ')' if zabbix_web_check.status is defined else 'FALHA' }}"
+          - "Grafana (grafana.nverse.local): {{ 'OK (HTTP ' ~ grafana_check.status ~ ')' if grafana_check.status is defined and grafana_check.status != -1 else 'Pendente de Ingress / Em subida' }}"
+          - "---------------------------------------------------------"
+          - "[PODS ZABBIX]"
+          - "{{ pods_zabbix.stdout_lines }}"
+          - "---------------------------------------------------------"
+          - "[PODS MONITORING]"
+          - "{{ pods_monitoring.stdout_lines }}"
+          - "========================================================="

@@ -1,0 +1,65 @@
+---
+- name: 02 - Publicar Zabbix Web Interface via Traefik Ingress
+  hosts: k8s-control-plane-01
+  become: yes
+  vars:
+    zabbix_namespace: "zabbix"
+    ingress_host: "zabbix.nverse.local"
+
+  tasks:
+    - name: Atualizar Service do Zabbix Web para ClusterIP e Criar Ingress Traefik
+      ansible.builtin.shell: |
+        kubectl apply -f - <<'EOF'
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: zabbix-web-service
+          namespace: zabbix
+        spec:
+          type: ClusterIP
+          selector:
+            app: zabbix-web
+          ports:
+            - name: http
+              port: 8080
+              targetPort: 8080
+        ---
+        apiVersion: networking.k8s.io/v1
+        kind: Ingress
+        metadata:
+          name: zabbix-web-ingress
+          namespace: zabbix
+          annotations:
+            traefik.ingress.kubernetes.io/router.entrypoints: web
+        spec:
+          ingressClassName: traefik
+          rules:
+            - host: zabbix.nverse.local
+              http:
+                paths:
+                  - path: /
+                    pathType: Prefix
+                    backend:
+                      service:
+                        name: zabbix-web-service
+                        port:
+                          number: 8080
+            - host: zabbix.local
+              http:
+                paths:
+                  - path: /
+                    pathType: Prefix
+                    backend:
+                      service:
+                        name: zabbix-web-service
+                        port:
+                          number: 8080
+        EOF
+      register: ingress_out
+
+    - name: Exibir resultado da publicação do Ingress
+      ansible.builtin.debug:
+        msg:
+          - "Service zabbix-web-service alterado para ClusterIP (liberou IP isolado)."
+          - "Ingress criado para os domínios: zabbix.nverse.local e zabbix.local"
+          - "Tráfego HTTP roteado via Traefik Ingress Controller."

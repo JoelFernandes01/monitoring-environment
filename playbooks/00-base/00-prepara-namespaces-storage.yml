@@ -3,34 +3,44 @@
   hosts: k8s-control-plane-01
   become: yes
   vars:
-    kubeconfig_path: "/etc/kubernetes/admin.conf"
+    kubeconfig_path: "/home/connect/.kube/config"
     zabbix_namespace: "zabbix"
 
   tasks:
-    - name: Criar Namespace zabbix
-      kubernetes.core.k8s:
+    - name: Instalar pacote python3-kubernetes no CP-01 (para o modulo kubernetes.core.k8s)
+      ansible.builtin.apt:
+        name: python3-kubernetes
         state: present
-        kubeconfig: "{{ kubeconfig_path }}"
-        definition:
-          apiVersion: v1
-          kind: Namespace
-          metadata:
-            name: "{{ zabbix_namespace }}"
+        update_cache: yes
+      ignore_errors: yes
+
+    - name: Criar Namespace zabbix via kubectl
+      become_user: connect
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      ansible.builtin.shell: |
+        kubectl create namespace {{ zabbix_namespace }} --dry-run=client -o yaml | kubectl apply -f -
+      register: ns_result
+      changed_when: "'created' in ns_result.stdout"
 
     - name: Criar PersistentVolumeClaim (PVC) NFS para o PostgreSQL do Zabbix
-      kubernetes.core.k8s:
-        state: present
-        kubeconfig: "{{ kubeconfig_path }}"
-        definition:
-          apiVersion: v1
-          kind: PersistentVolumeClaim
-          metadata:
-            name: zabbix-db-pvc
-            namespace: "{{ zabbix_namespace }}"
-          spec:
-            accessModes:
-              - ReadWriteOnce
-            storageClassName: nfs-client
-            resources:
-              requests:
-                storage: 10Gi
+      become_user: connect
+      environment:
+        KUBECONFIG: "{{ kubeconfig_path }}"
+      ansible.builtin.shell: |
+        cat <<EOF | kubectl apply -f -
+        apiVersion: v1
+        kind: PersistentVolumeClaim
+        metadata:
+          name: zabbix-db-pvc
+          namespace: {{ zabbix_namespace }}
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          storageClassName: nfs-client
+          resources:
+            requests:
+              storage: 10Gi
+        EOF
+      register: pvc_result
+      changed_when: "'created' in pvc_result.stdout"

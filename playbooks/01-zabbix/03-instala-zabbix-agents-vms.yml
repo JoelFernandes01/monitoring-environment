@@ -1,22 +1,28 @@
 ---
-- name: 03 - Instala e Configura Zabbix Agent 2 (v8.0 LTS) em todas as VMs
-  hosts: all_vms
+- name: 03 - Instala e Configura Zabbix Agent 2 (v8.0 LTS) em todas as VMs com FQDN
+  hosts: all
   become: true
   vars:
-    zabbix_server_ip: "10.0.39.201"
+    zabbix_server_host: "zabbix.nverse.local"
 
   tasks:
-    - name: Instalar Zabbix Agent 2
+    - name: Instalar Zabbix Agent 2 v8.0
       ansible.builtin.apt:
         name: zabbix-agent2
         state: present
         update_cache: yes
 
-    - name: Configurar IP do Zabbix Server no zabbix_agent2.conf
+    - name: Configurar Zabbix Server (Passivo) no zabbix_agent2.conf com FQDN
       ansible.builtin.lineinfile:
         path: /etc/zabbix/zabbix_agent2.conf
         regexp: '^Server='
-        line: "Server={{ zabbix_server_ip }}"
+        line: "Server={{ zabbix_server_host }}"
+
+    - name: Configurar Zabbix Server (Ativo) no zabbix_agent2.conf com FQDN
+      ansible.builtin.lineinfile:
+        path: /etc/zabbix/zabbix_agent2.conf
+        regexp: '^ServerActive='
+        line: "ServerActive={{ zabbix_server_host }}"
 
     - name: Configurar Hostname ativo no zabbix_agent2.conf
       ansible.builtin.lineinfile:

@@ -1,14 +1,14 @@
 ---
-- name: 02 - Deploy Zabbix Server 8.0 e Web Interface Nginx/PgSQL
+- name: 02 - Deploy Zabbix Server 8.0, Agent Sidecar e Web Interface via Traefik Ingress
   hosts: k8s-control-plane-01
   become: yes
   vars:
     kubeconfig_path: "/etc/kubernetes/admin.conf"
     zabbix_namespace: "zabbix"
-    zabbix_tag: "ubuntu-8.0-latest"
+    zabbix_version_tag: "ubuntu-8.0-latest"
 
   tasks:
-    - name: Implantar Zabbix Server 8.0 Deployment
+    - name: Implantar Zabbix Server Deployment com Sidecar Agent 2
       kubernetes.core.k8s:
         state: present
         kubeconfig: "{{ kubeconfig_path }}"
@@ -30,7 +30,7 @@
               spec:
                 containers:
                   - name: zabbix-server
-                    image: "zabbix/zabbix-server-pgsql:{{ zabbix_tag }}"
+                    image: "zabbix/zabbix-server-pgsql:{{ zabbix_version_tag }}"
                     env:
                       - name: DB_SERVER_HOST
                         value: "zabbix-db-service"
@@ -43,7 +43,17 @@
                     ports:
                       - containerPort: 10051
 
-    - name: Criar Service ClusterIP para Zabbix Server (Porta 10051 Trappers/Agents)
+                  - name: zabbix-agent
+                    image: "zabbix/zabbix-agent2:{{ zabbix_version_tag }}"
+                    env:
+                      - name: ZBX_SERVER_HOST
+                        value: "127.0.0.1"
+                      - name: ZBX_HOSTNAME
+                        value: "Zabbix server"
+                    ports:
+                      - containerPort: 10050
+
+    - name: Criar Service ClusterIP para Zabbix Server
       kubernetes.core.k8s:
         state: present
         kubeconfig: "{{ kubeconfig_path }}"
@@ -62,7 +72,7 @@
                 port: 10051
                 targetPort: 10051
 
-    - name: Implantar Zabbix Web Interface 8.0 Deployment
+    - name: Implantar Zabbix Web Interface Deployment
       kubernetes.core.k8s:
         state: present
         kubeconfig: "{{ kubeconfig_path }}"
@@ -84,7 +94,7 @@
               spec:
                 containers:
                   - name: zabbix-web
-                    image: "zabbix/zabbix-web-nginx-pgsql:{{ zabbix_tag }}"
+                    image: "zabbix/zabbix-web-nginx-pgsql:{{ zabbix_version_tag }}"
                     env:
                       - name: DB_SERVER_HOST
                         value: "zabbix-db-service"
@@ -95,13 +105,15 @@
                       - name: POSTGRES_PASSWORD
                         value: "ZabbixSecurePassword2026!"
                       - name: ZBX_SERVER_HOST
-                        value: "zabbix-server"
+                        value: "zabbix-server-service"
+                      - name: ZBX_SERVER_PORT
+                        value: "10051"
                       - name: PHP_TZ
                         value: "America/Sao_Paulo"
                     ports:
                       - containerPort: 8080
 
-    - name: Criar Service LoadBalancer para Zabbix Web (IP MetalLB: 10.0.39.201)
+    - name: Criar Service ClusterIP para Zabbix Web
       kubernetes.core.k8s:
         state: present
         kubeconfig: "{{ kubeconfig_path }}"
@@ -112,15 +124,46 @@
             name: zabbix-web-service
             namespace: "{{ zabbix_namespace }}"
           spec:
-            type: LoadBalancer
-            loadBalancerIP: 10.0.39.201
+            type: ClusterIP
             selector:
               app: zabbix-web
             ports:
-              - port: 80
+              - name: http
+                port: 8080
                 targetPort: 8080
 
-    - name: Aguardar pod do Zabbix Server e Web em estado Ready
-      ansible.builtin.command: >
-        kubectl rollout status deployment/zabbix-server -n {{ zabbix_namespace }} --timeout=180s --kubeconfig={{ kubeconfig_path }}
-      changed_when: false
+    - name: Criar Traefik Ingress para Zabbix Web
+      kubernetes.core.k8s:
+        state: present
+        kubeconfig: "{{ kubeconfig_path }}"
+        definition:
+          apiVersion: networking.k8s.io/v1
+          kind: Ingress
+          metadata:
+            name: zabbix-web-ingress
+            namespace: "{{ zabbix_namespace }}"
+            annotations:
+              traefik.ingress.kubernetes.io/router.entrypoints: web
+          spec:
+            ingressClassName: traefik
+            rules:
+              - host: zabbix.nverse.local
+                http:
+                  paths:
+                    - path: /
+                      pathType: Prefix
+                      backend:
+                        service:
+                          name: zabbix-web-service
+                          port:
+                            number: 8080
+              - host: zabbix.local
+                http:
+                  paths:
+                    - path: /
+                      pathType: Prefix
+                      backend:
+                        service:
+                          name: zabbix-web-service
+                          port:
+                            number: 8080

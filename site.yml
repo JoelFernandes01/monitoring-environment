@@ -1,13 +1,16 @@
 ---
-# Playbook Mestre - Implanta a Stack Completa de Observabilidade (Zabbix + Prometheus + Grafana)
+# Playbook Mestre - Instalação Completa da Stack Unificada de Monitoramento
+# (Zabbix 8.0 LTS + Kube-Prometheus-Stack + Grafana + Testes E2E)
 
 - import_playbook: playbooks/00-base/00-prepara-namespaces-storage.yml
 - import_playbook: playbooks/01-zabbix/01-configura-banco-zabbix.yml
 - import_playbook: playbooks/01-zabbix/02-deploy-zabbix-server.yml
+- import_playbook: playbooks/01-zabbix/02-deploy-zabbix-ingress.yml
 - import_playbook: playbooks/01-zabbix/03-instala-zabbix-agents-vms.yml
 - import_playbook: playbooks/02-prometheus/04-instala-prometheus-stack.yml
-- import_playbook: playbooks/02-prometheus/05-configura-rules-alertas.yml
-- import_playbook: playbooks/03-grafana/06-instala-grafana.yml
-- import_playbook: playbooks/03-grafana/07-configura-datasources.yml
-- import_playbook: playbooks/03-grafana/08-importa-dashboards.yml
-- import_playbook: playbooks/04-testing/09-valida-conectividade-stack.yml
+- import_playbook: playbooks/02-prometheus/05-instala-prometheus-ingress.yml
+- import_playbook: playbooks/02-prometheus/06-configura-rules-alertas.yml
+- import_playbook: playbooks/03-grafana/07-instala-grafana.yml
+- import_playbook: playbooks/03-grafana/08-configura-datasources.yml
+- import_playbook: playbooks/03-grafana/09-importa-dashboards.yml
+- import_playbook: playbooks/04-testing/10-valida-conectividade-stack.yml

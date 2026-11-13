@@ -7,35 +7,35 @@
     monitoring_namespace: "monitoring"
 
   tasks:
-    - name: Adicionar repositorio Helm do Prometheus
-      kubernetes.core.helm_repository:
-        name: prometheus-community
-        repo_url: "prometheus-community.github.io/helm-charts"
+    - name: Criar Namespace monitoring
+      shell: |
+        kubectl --kubeconfig {{ kubeconfig_path }} create namespace {{ monitoring_namespace }} --dry-run=client -o yaml | kubectl --kubeconfig {{ kubeconfig_path }} apply -f -
+      register: create_ns
+      changed_when: false
 
-    - name: Implantar Kube-Prometheus-Stack
-      kubernetes.core.helm:
-        name: kube-prometheus-stack
-        chart_ref: prometheus-community/kube-prometheus-stack
-        release_namespace: "{{ monitoring_namespace }}"
-        create_namespace: true
-        state: present
-        wait: yes
-        kubeconfig: "{{ kubeconfig_path }}"
-        values:
-          prometheus:
-            prometheusSpec:
-              retention: 15d
-              storageSpec:
-                volumeClaimTemplate:
-                  spec:
-                    storageClassName: nfs-client
-                    accessModes: ["ReadWriteOnce"]
-                    resources:
-                      requests:
-                        storage: 50Gi
-          grafana:
-            enabled: true
-            service:
-              type: LoadBalancer
-              loadBalancerIP: 10.0.39.202
-            adminPassword: "GrafanaSecurePassword2026!"
+    - name: Adicionar repositorio Helm do Prometheus
+      shell: |
+        helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+        helm repo update
+      register: helm_repo
+
+    - name: Instalar ou Atualizar Kube-Prometheus-Stack via Helm
+      shell: |
+        helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+          --namespace {{ monitoring_namespace }} \
+          --set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.storageClassName=nfs-client \
+          --set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.accessModes0[0]=ReadWriteOnce \
+          --set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.resources.requests.storage=10Gi \
+          --set alertmanager.alertmanagerSpec.storage.volumeClaimTemplate.spec.storageClassName=nfs-client \
+          --set alertmanager.alertmanagerSpec.storage.volumeClaimTemplate.spec.accessModes0[0]=ReadWriteOnce \
+          --set alertmanager.alertmanagerSpec.storage.volumeClaimTemplate.spec.resources.requests.storage=5Gi \
+          --set grafana.enabled=true \
+          --set grafana.persistence.enabled=true \
+          --set grafana.persistence.storageClassName=nfs-client \
+          --set grafana.persistence.size=5Gi \
+          --kubeconfig {{ kubeconfig_path }}
+      register: helm_install
+
+    - name: Exibir resultado da instalacao do Prometheus Stack
+      debug:
+        msg: "Kube-Prometheus-Stack instalado com sucesso no namespace {{ monitoring_namespace }}!"

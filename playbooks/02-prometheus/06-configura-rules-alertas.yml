@@ -1,0 +1,49 @@
+---
+- name: 05 - Configura Regras de Alerta do Prometheus
+  hosts: k8s-control-plane-01
+  become: yes
+  vars:
+    kubeconfig_path: "/etc/kubernetes/admin.conf"
+    monitoring_namespace: "monitoring"
+
+  tasks:
+    - name: Aplicar manifesto PrometheusRule via kubectl
+      ansible.builtin.shell: |
+        kubectl apply --kubeconfig {{ kubeconfig_path }} -f - <<'EOF'
+        {% raw %}
+        apiVersion: monitoring.coreos.com/v1
+        kind: PrometheusRule
+        metadata:
+          name: custom-cluster-alerts
+          namespace: monitoring
+          labels:
+            role: alert-rules
+            app.kubernetes.io/name: kube-prometheus-stack
+            release: kube-prometheus-stack
+        spec:
+          groups:
+            - name: cluster-node-alerts
+              rules:
+                - alert: NodeHighCpuUsage
+                  expr: (1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) by (instance)) * 100 > 85
+                  for: 5m
+                  labels:
+                    severity: warning
+                  annotations:
+                    summary: "Uso elevado de CPU no nó ({{ $labels.instance }})"
+                    description: "O uso de CPU no nó {{ $labels.instance }} está acima de 85% por mais de 5 minutos."
+                - alert: NodeHighMemoryUsage
+                  expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+                  for: 5m
+                  labels:
+                    severity: warning
+                  annotations:
+                    summary: "Uso elevado de Memória no nó ({{ $labels.instance }})"
+                    description: "O uso de memória RAM no nó {{ $labels.instance }} está acima de 85% por mais de 5 minutos."
+        {% endraw %}
+        EOF
+      register: rules_out
+
+    - name: Exibir resultado da aplicação das regras
+      ansible.builtin.debug:
+        msg: "Regras de alerta do Prometheus (PrometheusRule) aplicadas com sucesso!"
