@@ -4,7 +4,7 @@
   become: yes
   vars:
     kubeconfig_path: "/etc/kubernetes/admin.conf"
-    traefik_ip: "10.0.39.200"
+    traefik_ip: "10.0.39.201"
     zabbix_fqdn: "zabbix.nverse.local"
     grafana_fqdn: "grafana.nverse.local"
 
