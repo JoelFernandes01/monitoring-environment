@@ -1,7 +1,7 @@
 ---
 - name: 08 - Instala Plugin Zabbix e Cria Ingress Traefik para Grafana
   hosts: k8s-control-plane-01
-  become: true
+  become: yes
   vars:
     kubeconfig_path: "/etc/kubernetes/admin.conf"
     monitoring_namespace: "monitoring"
