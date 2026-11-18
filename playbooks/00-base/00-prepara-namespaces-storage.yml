@@ -1,7 +1,7 @@
 ---
 - name: 00 - Prepara Namespace e Storage PVC para o Zabbix
   hosts: k8s-control-plane-01
-  become: yes
+  become: true
   vars:
     kubeconfig_path: "/home/connect/.kube/config"
     zabbix_namespace: "zabbix"
@@ -11,8 +11,8 @@
       ansible.builtin.apt:
         name: python3-kubernetes
         state: present
-        update_cache: yes
-      ignore_errors: yes
+        update_cache: true
+      ignore_errors: true
 
     - name: Criar Namespace zabbix via kubectl
       become_user: connect

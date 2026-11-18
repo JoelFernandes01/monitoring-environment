@@ -1,7 +1,7 @@
 ---
-- name: 06 - Instala Plugin Zabbix e Cria Ingress Traefik para Grafana
+- name: 08 - Instala Plugin Zabbix e Cria Ingress Traefik para Grafana
   hosts: k8s-control-plane-01
-  become: yes
+  become: true
   vars:
     kubeconfig_path: "/etc/kubernetes/admin.conf"
     monitoring_namespace: "monitoring"
@@ -50,10 +50,18 @@
                           port:
                             number: 80
 
-    - name: Forcar reinicio limpo do Grafana (scale 0 -> scale 1)
+    - name: Forcar reinicio limpo do Grafana (Garantir liberacao do volume NFS)
       ansible.builtin.shell: |
+        # 1. Zera a quantidade de replicas do Deployment
         kubectl --kubeconfig {{ kubeconfig_path }} scale deployment/kube-prometheus-stack-grafana -n {{ monitoring_namespace }} --replicas=0
-        sleep 5
+        
+        # 2. Forca a remocao de Pods travados em Terminating para liberar a trava do NFS (PVC)
+        kubectl --kubeconfig {{ kubeconfig_path }} delete pod -n {{ monitoring_namespace }} -l app.kubernetes.io/name=grafana --force --grace-period=0 || true
+        
+        # 3. Aguarda 10 segundos para o NFS liberar o volume no storage server
+        sleep 10
+        
+        # 4. Restaura a replica para 1
         kubectl --kubeconfig {{ kubeconfig_path }} scale deployment/kube-prometheus-stack-grafana -n {{ monitoring_namespace }} --replicas=1
       register: scale_out
 
