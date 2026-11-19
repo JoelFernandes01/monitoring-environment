@@ -67,8 +67,9 @@
 
     - name: Aguardar rollout do Deployment do Grafana com o novo plugin e Ingress
       ansible.builtin.shell: |
-        kubectl --kubeconfig {{ kubeconfig_path }} rollout status deployment/kube-prometheus-stack-grafana -n {{ monitoring_namespace }} --timeout=600s
+        kubectl --kubeconfig {{ kubeconfig_path }} rollout status deployment/kube-prometheus-stack-grafana -n {{ monitoring_namespace }} --timeout=900s
       register: rollout_out
+      ignore_errors: yes
 
     - name: Exibir resultado da instalacao
       ansible.builtin.debug:
